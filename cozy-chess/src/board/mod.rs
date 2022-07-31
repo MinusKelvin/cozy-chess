@@ -35,8 +35,10 @@ pub struct Board {
     inner: ZobristBoard,
     pinned: BitBoard,
     checkers: BitBoard,
-    halfmove_clock: u8,
-    fullmove_number: u16
+    /// The number of plys since the last capture or pawn push
+    pub halfmove_clock: u8,
+    /// The number of moves since the start of the game
+    pub fullmove_number: u16
 }
 
 impl Default for Board {
@@ -291,43 +293,6 @@ impl Board {
         self.checkers
     }
 
-    /// Get the [halfmove clock](https://www.chessprogramming.org/Halfmove_Clock).
-    /// # Examples
-    /// ```
-    /// # use cozy_chess::*;
-    /// let mut board = Board::default();
-    /// assert_eq!(board.halfmove_clock(), 0);
-    /// board.play_unchecked("e2e4".parse().unwrap());
-    /// board.play_unchecked("e7e5".parse().unwrap());
-    /// // Remains at zero for pawn moves
-    /// assert_eq!(board.halfmove_clock(), 0);
-    /// board.play_unchecked("e1e2".parse().unwrap());
-    /// // Non-pawn move
-    /// assert_eq!(board.halfmove_clock(), 1);
-    /// ```
-    #[inline(always)]
-    pub fn halfmove_clock(&self) -> u8 {
-        self.halfmove_clock
-    }
-
-    /// Get the [fullmove number](https://www.chessprogramming.org/Forsyth-Edwards_Notation#Fullmove_counter).
-    /// # Examples
-    /// ```
-    /// # use cozy_chess::*;
-    /// let mut board = Board::default();
-    /// // The fullmove number starts at one.
-    /// assert_eq!(board.fullmove_number(), 1);
-    /// board.play_unchecked("e2e4".parse().unwrap());
-    /// board.play_unchecked("e7e5".parse().unwrap());
-    /// board.play_unchecked("e1e2".parse().unwrap());
-    /// // 3 plies is 1.5 moves, which rounds down
-    /// assert_eq!(board.fullmove_number(), 2);
-    /// ```
-    #[inline(always)]
-    pub fn fullmove_number(&self) -> u16 {
-        self.fullmove_number
-    }
-
     /// Get the [`Piece`] on `square`, if there is one.
     /// # Examples
     /// ```
@@ -424,7 +389,7 @@ impl Board {
     /// assert_eq!(board.status(), GameStatus::Drawn);
     /// ```
     pub fn status(&self) -> GameStatus {
-        if self.halfmove_clock() >= 100 {
+        if self.halfmove_clock >= 100 {
             GameStatus::Drawn
         } else if self.generate_moves(|_| true) {
             GameStatus::Ongoing

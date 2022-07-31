@@ -216,8 +216,8 @@ impl BoardBuilder {
         this.side_to_move = board.side_to_move();
         let en_passant_rank = Rank::Third.relative_to(!board.side_to_move());
         this.en_passant = board.en_passant().map(|f| Square::new(f, en_passant_rank));
-        this.halfmove_clock = board.halfmove_clock();
-        this.fullmove_number = board.fullmove_number();
+        this.halfmove_clock = board.halfmove_clock;
+        this.fullmove_number = board.fullmove_number;
         this
     }
 
