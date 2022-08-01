@@ -69,7 +69,7 @@ const ZOBRIST: ZobristConstants = {
     }
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ZobristBoard {
     pieces: [BitBoard; Piece::NUM],
     colors: [BitBoard; Color::NUM],
