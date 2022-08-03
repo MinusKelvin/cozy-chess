@@ -5,6 +5,7 @@ use std::fs::File;
 
 use cozy_chess_types::*;
 
+#[cfg(not(feature = "pdep-compression"))]
 fn write_moves(
     table: &mut [BitBoard],
     relevant_blockers: impl Fn(Square) -> BitBoard,
@@ -19,6 +20,7 @@ fn write_moves(
     }
 }
 
+#[cfg(not(feature = "pdep-compression"))]
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
@@ -42,6 +44,61 @@ fn main() {
     write!(&mut out_file, "const SLIDING_MOVES: &[u64; {}] = &[", table.len()).unwrap();
     for magic in &table {
         write!(&mut out_file, "{},", magic.0).unwrap();
+    }
+    write!(&mut out_file, "];").unwrap();
+}
+
+#[cfg(feature = "pdep-compression")]
+fn write_moves(
+    table: &mut [u16],
+    relevant_blockers: impl Fn(Square) -> BitBoard,
+    rays: impl Fn(Square) -> BitBoard,
+    table_index: impl Fn(Square, BitBoard) -> usize,
+    slider_moves: impl Fn(Square, BitBoard) -> BitBoard
+) {
+    // software pext so we don't have to rely on an intrinsic for this part
+    fn pext(a: BitBoard, mask: BitBoard) -> u16 {
+        mask
+            .into_iter()
+            .enumerate()
+            .fold(0, |acc, (i, sq)| acc | (a.has(sq) as u16) << i)
+    }
+
+    for &square in &Square::ALL {
+        let mask = relevant_blockers(square);
+        for blockers in mask.iter_subsets() {
+            table[table_index(square, blockers)] =
+                pext(slider_moves(square, blockers), rays(square));
+        }
+    }
+}
+
+#[cfg(feature = "pdep-compression")]
+fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+
+    let mut table = [0; SLIDING_MOVE_TABLE_SIZE];
+    write_moves(
+        &mut table,
+        get_rook_relevant_blockers,
+        |sq| get_rook_moves_slow(sq, BitBoard::EMPTY),
+        get_rook_moves_index,
+        get_rook_moves_slow
+    );
+    write_moves(
+        &mut table,
+        get_bishop_relevant_blockers,
+        |sq| get_bishop_moves_slow(sq, BitBoard::EMPTY),
+        get_bishop_moves_index,
+        get_bishop_moves_slow
+    );
+
+    let mut out_file: PathBuf = std::env::var("OUT_DIR").unwrap().into();
+    out_file.push("sliding_moves.rs");
+    let mut out_file = BufWriter::new(File::create(out_file).unwrap());
+    write!(&mut out_file, "const SLIDING_MOVES: &[u16; {}] = &[", table.len()).unwrap();
+    for magic in &table {
+        write!(&mut out_file, "{},", magic).unwrap();
     }
     write!(&mut out_file, "];").unwrap();
 }

@@ -31,7 +31,13 @@ include!(concat!(env!("OUT_DIR"), "/sliding_moves.rs"));
 /// ```
 #[inline(always)]
 pub fn get_rook_moves(square: Square, blockers: BitBoard) -> BitBoard {
-    BitBoard(SLIDING_MOVES[get_rook_moves_index(square, blockers)])
+    let data = SLIDING_MOVES[get_rook_moves_index(square, blockers)];
+
+    #[cfg(feature = "pdep-compression")]
+    // SAFETY: We cause a compile error in lib.rs if this instruction is not available.
+    let data = unsafe { core::arch::x86_64::_pdep_u64(data as u64, get_rook_rays(square).0) };
+
+    BitBoard(data)
 }
 
 /// Significantly slower `const` version of [`get_rook_moves`].
@@ -68,7 +74,13 @@ pub const fn get_rook_moves_const(square: Square, blockers: BitBoard) -> BitBoar
 /// ```
 #[inline(always)]
 pub fn get_bishop_moves(square: Square, blockers: BitBoard) -> BitBoard {
-    BitBoard(SLIDING_MOVES[get_bishop_moves_index(square, blockers)])
+    let data = SLIDING_MOVES[get_bishop_moves_index(square, blockers)];
+
+    #[cfg(feature = "pdep-compression")]
+    // SAFETY: We cause a compile error in lib.rs if this instruction is not available.
+    let data = unsafe { core::arch::x86_64::_pdep_u64(data as u64, get_bishop_rays(square).0) };
+
+    BitBoard(data)
 }
 
 /// Significantly slower `const` version of [`get_bishop_moves`].

@@ -36,3 +36,4 @@ harness = false
 [features]
 std = ["cozy-chess-types/std"]
 pext = ["cozy-chess-types/pext"]
+pdep-compression = []
