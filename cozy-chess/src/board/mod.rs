@@ -452,8 +452,6 @@ impl Board {
             GameStatus::Drawn
         } else if self.generate_moves(|_| true) {
             GameStatus::Ongoing
-        } else if self.checkers().is_empty() {
-            GameStatus::Drawn
         } else {
             GameStatus::Won
         }
