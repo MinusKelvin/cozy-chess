@@ -52,8 +52,11 @@ impl Board {
     // Squares we can land on. When we're in check, we have to block
     // or capture the checker. In any case, we can't land on our own
     // pieces. Assumed to only be called if there is only one checker.
-    fn target_squares<const IN_CHECK: bool>(&self) -> BitBoard {
-        let color = self.side_to_move();
+    fn target_squares<const IN_CHECK: bool, const WTM: bool>(&self) -> BitBoard {
+        let color = match WTM {
+            true => Color::White,
+            false => Color::Black,
+        };
         let targets = if IN_CHECK {
             let checker = self.checkers().next_square().unwrap();
             let our_king = self.king(color);
@@ -65,14 +68,17 @@ impl Board {
     }
 
     fn add_slider_legals<
-        P: slider::SlidingPiece, F: FnMut(PieceMoves) -> bool, const IN_CHECK: bool
+        P: slider::SlidingPiece, F: FnMut(PieceMoves) -> bool, const IN_CHECK: bool, const WTM: bool
     >(&self, mask: BitBoard, listener: &mut F) -> bool {
-        let color = self.side_to_move();
+        let color = match WTM {
+            true => Color::White,
+            false => Color::Black,
+        };
         let our_king = self.king(color);
         let pieces = self.colored_pieces(color, P::PIECE) & mask;
         let pinned = self.pinned();
         let blockers = self.occupied();
-        let target_squares = self.target_squares::<IN_CHECK>();
+        let target_squares = self.target_squares::<IN_CHECK, WTM>();
 
         for piece in pieces & !pinned {
             let moves = P::pseudo_legals(piece, blockers) & target_squares;
@@ -103,14 +109,17 @@ impl Board {
     }
 
     fn add_knight_legals<
-        F: FnMut(PieceMoves) -> bool, const IN_CHECK: bool
+        F: FnMut(PieceMoves) -> bool, const IN_CHECK: bool, const WTM: bool
     >(&self, mask: BitBoard, listener: &mut F) -> bool {
         const PIECE: Piece = Piece::Knight;
 
-        let color = self.side_to_move();
+        let color = match WTM {
+            true => Color::White,
+            false => Color::Black,
+        };
         let pieces = self.colored_pieces(color, PIECE) & mask;
         let pinned = self.pinned();
-        let target_squares = self.target_squares::<IN_CHECK>();
+        let target_squares = self.target_squares::<IN_CHECK, WTM>();
 
         for piece in pieces & !pinned {
             let moves = get_knight_moves(piece) & target_squares;
@@ -126,17 +135,20 @@ impl Board {
     }
 
     fn add_pawn_legals<
-        F: FnMut(PieceMoves) -> bool, const IN_CHECK: bool
+        F: FnMut(PieceMoves) -> bool, const IN_CHECK: bool, const WTM: bool
     >(&self, mask: BitBoard, listener: &mut F) -> bool {
         const PIECE: Piece = Piece::Pawn;
 
-        let color = self.side_to_move();
+        let color = match WTM {
+            true => Color::White,
+            false => Color::Black,
+        };
         let our_king = self.king(color);
         let pieces = self.colored_pieces(color, PIECE) & mask;
         let their_pieces = self.colors(!color);
         let pinned = self.pinned();
         let blockers = self.occupied();
-        let target_squares = self.target_squares::<IN_CHECK>();
+        let target_squares = self.target_squares::<IN_CHECK, WTM>();
 
         for piece in pieces & !pinned {
             let moves = (
@@ -208,7 +220,7 @@ impl Board {
     }
 
     #[inline(always)]
-    fn king_safe_on(&self, square: Square) -> bool {
+    fn king_safe_on<const WTM: bool>(&self, square: Square) -> bool {
         macro_rules! short_circuit {
             ($($attackers:expr),*) => {
                 $(if !$attackers.is_empty() {
@@ -218,7 +230,10 @@ impl Board {
             }
         }
 
-        let color = self.side_to_move();
+        let color = match WTM {
+            true => Color::White,
+            false => Color::Black,
+        };
         let their_pieces = self.colors(!color);
         let blockers = self.occupied()
             ^ self.colored_pieces(color, Piece::King)
@@ -236,8 +251,11 @@ impl Board {
         }
     }
 
-    fn can_castle(&self, rook: File, king_dest: File, rook_dest: File) -> bool {
-        let color = self.side_to_move();
+    fn can_castle<const WTM: bool>(&self, rook: File, king_dest: File, rook_dest: File) -> bool {
+        let color = match WTM {
+            true => Color::White,
+            false => Color::Black,
+        };
         let our_king = self.king(color);
         let back_rank = Rank::First.relative_to(color);
         let blockers = self.occupied() ^ our_king.bitboard();
@@ -252,15 +270,18 @@ impl Board {
         let must_be_empty = must_be_safe | king_to_rook | rook_dest.bitboard();
         !pinned.has(rook)
             && (blockers & must_be_empty).is_empty()
-            && must_be_safe.iter().all(|square| self.king_safe_on(square))
+            && must_be_safe.iter().all(|square| self.king_safe_on::<{WTM}>(square))
     }
 
     fn add_king_legals<
-        F: FnMut(PieceMoves) -> bool, const IN_CHECK: bool
+        F: FnMut(PieceMoves) -> bool, const IN_CHECK: bool, const WTM: bool
     >(&self, mask: BitBoard, listener: &mut F) -> bool {
         const PIECE: Piece = Piece::King;
 
-        let color = self.side_to_move();
+        let color = match WTM {
+            true => Color::White,
+            false => Color::Black,
+        };
         let our_pieces = self.colors(color);
         let our_king = self.king(color);
         if !mask.has(our_king) {
@@ -268,7 +289,7 @@ impl Board {
         }
         let mut moves = BitBoard::EMPTY;
         for to in get_king_moves(our_king) & !our_pieces {
-            if self.king_safe_on(to) {
+            if self.king_safe_on::<WTM>(to) {
                 moves |= to.bitboard();
             }
         }
@@ -276,12 +297,12 @@ impl Board {
             let rights = self.castle_rights(color);
             let back_rank = Rank::First.relative_to(color);
             if let Some(rook) = rights.short {
-                if self.can_castle(rook, File::G, File::F) {
+                if self.can_castle::<WTM>(rook, File::G, File::F) {
                     moves |= Square::new(rook, back_rank).bitboard();
                 }
             }
             if let Some(rook) = rights.long {
-                if self.can_castle(rook, File::C, File::D) {
+                if self.can_castle::<WTM>(rook, File::C, File::D) {
                     moves |= Square::new(rook, back_rank).bitboard();
                 }
             }
@@ -297,15 +318,15 @@ impl Board {
     }
 
     fn add_all_legals<
-        F: FnMut(PieceMoves) -> bool, const IN_CHECK: bool
+        F: FnMut(PieceMoves) -> bool, const IN_CHECK: bool, const WTM: bool
     >(&self, mask: BitBoard, listener: &mut F) -> bool {
         abort_if! {
-            self.add_pawn_legals::<_, IN_CHECK>(mask, listener),
-            self.add_knight_legals::<_, IN_CHECK>(mask, listener),
-            self.add_slider_legals::<slider::Bishop, _, IN_CHECK>(mask, listener),
-            self.add_slider_legals::<slider::Rook, _, IN_CHECK>(mask, listener),
-            self.add_slider_legals::<slider::Queen, _, IN_CHECK>(mask, listener),
-            self.add_king_legals::<_, IN_CHECK>(mask, listener)
+            self.add_pawn_legals::<_, IN_CHECK, WTM>(mask, listener),
+            self.add_knight_legals::<_, IN_CHECK, WTM>(mask, listener),
+            self.add_slider_legals::<slider::Bishop, _, IN_CHECK, WTM>(mask, listener),
+            self.add_slider_legals::<slider::Rook, _, IN_CHECK, WTM>(mask, listener),
+            self.add_slider_legals::<slider::Queen, _, IN_CHECK, WTM>(mask, listener),
+            self.add_king_legals::<_, IN_CHECK, WTM>(mask, listener)
         }
         false
     }
@@ -357,37 +378,44 @@ impl Board {
     pub fn generate_moves_for(
         &self, mask: BitBoard, mut listener: impl FnMut(PieceMoves) -> bool
     ) -> bool {
-        match self.checkers().len() {
-            0 => self.add_all_legals::<_, false>(mask, &mut listener),
-            1 => self.add_all_legals::<_, true>(mask, &mut listener),
-            _ => self.add_king_legals::<_, true>(mask, &mut listener)
+        match (self.checkers().len(), self.side_to_move()) {
+            (0, Color::White) => self.add_all_legals::<_, false, true>(mask, &mut listener),
+            (1, Color::White) => self.add_all_legals::<_, true, true>(mask, &mut listener),
+            (_, Color::White) => self.add_king_legals::<_, true, true>(mask, &mut listener),
+            (0, Color::Black) => self.add_all_legals::<_, false, false>(mask, &mut listener),
+            (1, Color::Black) => self.add_all_legals::<_, true, false>(mask, &mut listener),
+            (_, Color::Black) => self.add_king_legals::<_, true, false>(mask, &mut listener)
         }
     }
 
-    fn king_is_legal(&self, mv: Move) -> bool {
+    fn king_is_legal<const WTM: bool>(&self, mv: Move) -> bool {
+        let color = match WTM {
+            true => Color::White,
+            false => Color::Black,
+        };
         if self.checkers.is_empty() {
-            let castles = self.castle_rights(self.side_to_move());
-            let back_rank = Rank::First.relative_to(self.side_to_move());
+            let castles = self.castle_rights(color);
+            let back_rank = Rank::First.relative_to(color);
             if let Some(rook) = castles.short {
                 let rook_square = Square::new(rook, back_rank);
-                if rook_square == mv.to && self.can_castle(rook, File::G, File::F) {
+                if rook_square == mv.to && self.can_castle::<WTM>(rook, File::G, File::F) {
                     return true;
                 }
             }
             if let Some(rook) = castles.long {
                 let rook_square = Square::new(rook, back_rank);
-                if rook_square == mv.to && self.can_castle(rook, File::C, File::D) {
+                if rook_square == mv.to && self.can_castle::<WTM>(rook, File::C, File::D) {
                     return true;
                 }
             }
         }
-        if !(get_king_moves(mv.from) & !self.colors(self.side_to_move())).has(mv.to) {
+        if !(get_king_moves(mv.from) & !self.colors(color)).has(mv.to) {
             return false;
         }
         if mv.promotion.is_some() {
             return false;
         }
-        self.king_safe_on(mv.to)
+        self.king_safe_on::<WTM>(mv.to)
     }
 
     /// See if a move is legal.
@@ -399,16 +427,28 @@ impl Board {
     /// assert!(!board.is_legal("e1e8".parse().unwrap()));
     /// ```
     pub fn is_legal(&self, mv: Move) -> bool {
-        if !self.colors(self.side_to_move()).has(mv.from) {
+        match self.side_to_move() {
+            Color::White => self.is_legal_impl::<true>(mv),
+            Color::Black => self.is_legal_impl::<false>(mv),
+        }
+    }
+
+    fn is_legal_impl<const WTM: bool>(&self, mv: Move) -> bool {
+        let color = match WTM {
+            true => Color::White,
+            false => Color::Black,
+        };
+
+        if !self.colors(color).has(mv.from) {
             return false;
         }
 
-        let king_sq = self.king(self.side_to_move());
+        let king_sq = self.king(color);
         if mv.from == king_sq {
             if mv.promotion.is_some() {
                 return false;
             }
-            return self.king_is_legal(mv);
+            return self.king_is_legal::<WTM>(mv);
         }
 
         if self.pinned().has(mv.from) && !get_line_rays(king_sq, mv.from).has(mv.to) {
@@ -416,8 +456,8 @@ impl Board {
         }
 
         let target_squares = match self.checkers().len() {
-            0 => self.target_squares::<false>(),
-            1 => self.target_squares::<true>(),
+            0 => self.target_squares::<false, WTM>(),
+            1 => self.target_squares::<true, WTM>(),
             _ => return false,
         };
 
@@ -437,9 +477,9 @@ impl Board {
                 }
                 let mut c = |moves: PieceMoves| moves.to.has(mv.to);
                 if self.checkers().is_empty() {
-                    self.add_pawn_legals::<_, false>(mv.from.bitboard(), &mut c)
+                    self.add_pawn_legals::<_, false, WTM>(mv.from.bitboard(), &mut c)
                 } else {
-                    self.add_pawn_legals::<_, true>(mv.from.bitboard(), &mut c)
+                    self.add_pawn_legals::<_, true, WTM>(mv.from.bitboard(), &mut c)
                 }
             }
             Some(Piece::Rook) => {
