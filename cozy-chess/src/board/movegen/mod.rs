@@ -364,6 +364,23 @@ impl Board {
         }
     }
 
+    /// Version of [`Board::generate_moves`] that places
+    /// all legal moves into the supplied container.
+    /// # Examples
+    /// ```
+    /// # use cozy_chess::*;
+    /// let board = Board::default();
+    /// let mut moves = vec![];
+    /// board.generate_moves_into(&mut moves);
+    /// assert_eq!(moves.len(), 20);
+    /// ```
+    pub fn generate_moves_into(&self, container: &mut impl Extend<Move>) {
+        self.generate_moves(|mvs| {
+            container.extend(mvs);
+            false
+        });
+    }
+
     fn king_is_legal(&self, mv: Move) -> bool {
         if self.checkers.is_empty() {
             let castles = self.castle_rights(self.side_to_move());
