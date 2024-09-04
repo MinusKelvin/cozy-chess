@@ -39,6 +39,7 @@ impl Board {
     /// assert_eq!(format!("{:#}", board), STARTPOS);
     /// ```
     pub fn from_fen(fen: &str, shredder: bool) -> Result<Self, FenParseError> {
+        _ = shredder;
         use FenParseError::*;
 
         let mut board = Self {
@@ -66,7 +67,7 @@ impl Board {
             return Err(InvalidBoard);
         }
 
-        Self::parse_castle_rights(&mut board, next()?, shredder)
+        Self::parse_castle_rights(&mut board, next()?)
             .map_err(|_| InvalidCastlingRights)?;
         if !board.castle_rights_are_valid() {
             return Err(InvalidCastlingRights);
@@ -133,7 +134,7 @@ impl Board {
         Ok(())
     }
 
-    fn parse_castle_rights(board: &mut Board, s: &str, shredder: bool) -> Result<(), ()> {
+    fn parse_castle_rights(board: &mut Board, s: &str) -> Result<(), ()> {
         if s != "-" {
             for c in s.chars() {
                 let color = if c.is_ascii_uppercase() {
@@ -142,15 +143,28 @@ impl Board {
                     Color::Black
                 };
                 let king_file = board.king(color).file();
-                let (short, file) = if shredder {
-                    let file = c.to_ascii_lowercase().try_into().map_err(|_| ())?;
-                    (king_file < file, file)
-                } else {
-                    match c.to_ascii_lowercase() {
-                        'k' => (true, File::H),
-                        'q' => (false, File::A),
-                        _ => return Err(())
+                let (short, file) = match c.to_ascii_lowercase() {
+                    'k' => {
+                        let mut rook_sq = Square::H1.relative_to(color);
+                        let rooks = board.colored_pieces(color, Piece::Rook);
+                        while !rooks.has(rook_sq) {
+                            rook_sq = rook_sq.try_offset(-1, 0).ok_or(())?;
+                        }
+                        (true, rook_sq.file())
                     }
+                    'q' => {
+                        let mut rook_sq = Square::A1.relative_to(color);
+                        let rooks = board.colored_pieces(color, Piece::Rook);
+                        while !rooks.has(rook_sq) {
+                            rook_sq = rook_sq.try_offset(1, 0).ok_or(())?;
+                        }
+                        (false, rook_sq.file())
+                    }
+                    'a'..='h' => {
+                        let file = c.to_ascii_lowercase().try_into().map_err(|_| ())?;
+                        (king_file < file, file)
+                    }
+                    _ => return Err(()),
                 };
                 let rights = board.castle_rights(color);
                 let prev = if short {
