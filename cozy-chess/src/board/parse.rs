@@ -280,16 +280,31 @@ impl Display for Board {
         write!(f, " {} ", self.side_to_move())?;
         let mut wrote_castle_rights = false;
         for &color in &Color::ALL {
+            let rooks = self.colored_pieces(color, Piece::Rook);
             let rights = self.castle_rights(color);
             let short = rights.short.map(|file| if shredder {
                 file.into()
             } else {
-                'k'
+                let mut castle_sq = Square::new(file, Rank::First.relative_to(color));
+                loop {
+                    match castle_sq.try_offset(1, 0) {
+                        Some(sq) if rooks.has(sq) => break file.into(),
+                        Some(sq) => castle_sq = sq,
+                        None => break 'k',
+                    };
+                }
             });
             let long = rights.long.map(|file| if shredder {
                 file.into()
             } else {
-                'q'
+                let mut castle_sq = Square::new(file, Rank::First.relative_to(color));
+                loop {
+                    match castle_sq.try_offset(-1, 0) {
+                        Some(sq) if rooks.has(sq) => break file.into(),
+                        Some(sq) => castle_sq = sq,
+                        None => break 'q',
+                    };
+                }
             });
             for mut right in short.into_iter().chain(long) {
                 if color == Color::White {
